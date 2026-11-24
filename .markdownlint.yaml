@@ -1,0 +1,11 @@
+# Configuración de markdownlint para este repositorio.
+default: true
+
+# Las tablas y los bloques de código del catálogo superan el ancho típico.
+MD013: false
+
+# Se permite HTML puntual (por ejemplo <details>).
+MD033: false
+
+# Los ficheros pueden empezar sin encabezado de primer nivel (plantillas).
+MD041: false
