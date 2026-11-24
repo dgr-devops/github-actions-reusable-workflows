@@ -1,0 +1,17 @@
+# Ejemplo de llamador: copiar a .github/workflows/lint-shell.yml del repo consumidor.
+name: Lint Shell
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@main
+    with:
+      path: scripts
+      severity: warning

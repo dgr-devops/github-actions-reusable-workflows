@@ -1,0 +1,20 @@
+# Ejemplo de llamador: copiar a .github/workflows/lint-markdown.yml del repo consumidor.
+name: Lint Markdown
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["**/*.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-markdown.yml@main
+    with:
+      globs: |
+        **/*.md
+        #node_modules
+        #CHANGELOG.md

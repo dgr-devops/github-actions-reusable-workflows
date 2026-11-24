@@ -1,0 +1,22 @@
+# Ejemplo de llamador: copiar a .github/workflows/test-python.yml del repo consumidor.
+name: Test Python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@main
+    with:
+      python-versions: '["3.11", "3.12", "3.13"]'
+      install-command: python -m pip install -e ".[dev]"
+      coverage-target: mi_paquete
+      coverage-threshold: 80
+    # Opcional: solo si usas Codecov.
+    secrets:
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}

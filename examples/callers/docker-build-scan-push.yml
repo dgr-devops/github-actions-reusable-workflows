@@ -1,0 +1,43 @@
+# Ejemplo de llamador: copiar a .github/workflows/docker.yml del repo consumidor.
+# En pull requests solo construye y escanea; publica en GHCR únicamente al
+# hacer push a la rama por defecto.
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    # El workflow reutilizable necesita packages:write; sin esto el job no arranca.
+    permissions:
+      contents: read
+      packages: write
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@main
+    with:
+      context: .
+      dockerfile: Dockerfile
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+    # Opcional: sin esto se usa el GITHUB_TOKEN de la ejecución.
+    # secrets:
+    #   registry-token: ${{ secrets.GHCR_TOKEN }}
+
+  report:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mostrar resultado
+        env:
+          IMAGE: ${{ needs.image.outputs.image }}
+          PUSHED: ${{ needs.image.outputs.pushed }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          echo "Imagen: $IMAGE"
+          echo "Publicada: $PUSHED"
+          echo "Digest: ${DIGEST:-n/a}"

@@ -1,0 +1,18 @@
+# Ejemplo de llamador: copiar a .github/workflows/lint-python.yml del repo consumidor.
+name: Lint Python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-python.yml@main
+    with:
+      path: src
+      python-version: "3.12"
+      check-format: true

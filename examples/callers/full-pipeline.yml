@@ -1,0 +1,31 @@
+# Ejemplo de pipeline completo para un repo con scripts, Python y Docker:
+# los linters corren en paralelo y la imagen solo se construye si pasan.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@main
+
+  python-lint:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-python.yml@main
+
+  python-test:
+    needs: python-lint
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@main
+    with:
+      coverage-target: src
+
+  image:
+    needs: [shell, python-test]
+    permissions:
+      contents: read
+      packages: write
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@main

@@ -1,0 +1,19 @@
+# Ejemplo de llamador: copiar a .github/workflows/terraform.yml del repo consumidor.
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["infra/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/terraform-check.yml@main
+    with:
+      working-directory: infra
+      terraform-version: "1.9.8"
+      tflint-config: .tflint.hcl
