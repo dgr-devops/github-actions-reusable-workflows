@@ -1,0 +1,78 @@
+name: CI
+
+# Autotest del repositorio: llama a cada workflow reutilizable contra las
+# fixtures de examples/ y valida los propios workflows con actionlint.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validar workflows con actionlint
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.12 -color
+
+  lint-shell:
+    name: lint-shell
+    uses: ./.github/workflows/lint-shell.yml
+    with:
+      path: examples/shell
+
+  lint-python:
+    name: lint-python
+    uses: ./.github/workflows/lint-python.yml
+    with:
+      path: examples/python
+
+  test-python:
+    name: test-python
+    uses: ./.github/workflows/test-python.yml
+    with:
+      working-directory: examples/python
+      python-versions: '["3.11", "3.12", "3.13"]'
+      coverage-target: demo_pkg
+      coverage-threshold: 90
+
+  docker:
+    name: docker-build-scan-push
+    uses: ./.github/workflows/docker-build-scan-push.yml
+    # El workflow reutilizable pide packages:write; el llamador debe concederlo.
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image-name: ${{ github.repository }}-example
+      context: examples/docker
+      dockerfile: examples/docker/Dockerfile
+      # Es un autotest: nunca publica la imagen de ejemplo.
+      push: false
+
+  terraform:
+    name: terraform-check
+    uses: ./.github/workflows/terraform-check.yml
+    with:
+      working-directory: examples/terraform
+
+  lint-markdown:
+    name: lint-markdown
+    uses: ./.github/workflows/lint-markdown.yml
+    with:
+      config: .markdownlint.yaml
