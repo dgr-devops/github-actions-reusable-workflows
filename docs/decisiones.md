@@ -14,7 +14,7 @@ Todos declaran `permissions: contents: read` a nivel de workflow y repiten el pe
 
 ## 3. Versiones: etiqueta mayor ahora, SHA como endurecimiento
 
-Las acciones se fijan a su etiqueta mayor (`actions/checkout@v4`, `docker/build-push-action@v6`...) y Trivy a una versión exacta (`0.28.0`). Es legible y recibe parches de seguridad menores, pero una etiqueta es mutable: si se compromete el repo de la acción, el cambio llega sin revisión.
+Las acciones se fijan a su etiqueta mayor (`actions/checkout@v4`, `docker/build-push-action@v6`...); se comprobó con `git ls-remote --tags` que todas existen. Es legible y recibe parches de seguridad menores, pero una etiqueta es mutable: si se compromete el repo de la acción, el cambio llega sin revisión.
 
 Endurecimiento recomendado y **no aplicado todavía**: fijar cada `uses:` al SHA completo y mantenerlo con Dependabot (`github-actions`). No se hizo porque no se pueden verificar SHAs sin acceso a GitHub, y un SHA inventado rompería el pipeline.
 
@@ -34,7 +34,8 @@ En un workflow reutilizable, `github.workflow` es el nombre del workflow **llama
 
 Flujo: build local (`load: true`) → Trivy sobre esa imagen → login, etiquetas y push. El segundo build reutiliza la caché de capas (`type=gha`), por lo que el coste extra es pequeño y la imagen publicada nunca llega al registro sin haber pasado el escaneo.
 
-- Trivy usa `exit-code: 1` con `HIGH,CRITICAL` por defecto.
+- Trivy se ejecuta desde la imagen oficial `aquasec/trivy:<versión>` (input `trivy-version`) montando el socket de Docker, no con `aquasecurity/trivy-action`. Motivos: es el mismo comando que se validó en local, una dependencia de terceros menos y una versión exacta y reproducible. (La primera versión usaba `trivy-action@0.28.0`, cuya etiqueta no existe: sus etiquetas llevan prefijo `v`. Lo detectó la comprobación con `git ls-remote`, no `actionlint`.) La base de datos de vulnerabilidades se cachea en `runner.temp`.
+- Trivy usa `--exit-code 1` con `HIGH,CRITICAL` por defecto.
 - `ignore-unfixed: true` por defecto: no tiene sentido bloquear por vulnerabilidades sin parche. Es configurable.
 - Limitación: con varias plataformas solo se escanea la imagen de la plataforma del runner (la que se carga localmente); las demás se publican sin escanear individualmente.
 - Se publica solo si `inputs.push`, el evento no es `pull_request` y `github.ref` es la rama por defecto. Se calcula en un único paso para que la decisión sea explícita y visible en el log.
@@ -77,7 +78,7 @@ Limitación asumida: una ruta local prueba el workflow del mismo commit, pero no
 
 ## 13. Pendiente y mejoras posibles
 
-- Fijar las acciones por SHA y añadir Dependabot.
+- Fijar las acciones por SHA (Dependabot, ya configurado en `.github/dependabot.yml`, propone las actualizaciones).
 - Publicar una etiqueta `v1` y recomendar `@v1` a los consumidores.
 - Subir los resultados de Trivy en formato SARIF a *Code scanning* (requiere `security-events: write`).
 - Firmar imágenes con cosign y generar SBOM.

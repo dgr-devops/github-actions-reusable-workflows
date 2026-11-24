@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  # Acciones usadas por los workflows reutilizables y por ci.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Imagen base de la fixture de Docker.
+  - package-ecosystem: docker
+    directory: /examples/docker
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"

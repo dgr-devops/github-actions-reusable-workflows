@@ -12,7 +12,7 @@ Catálogo de **workflows reutilizables de GitHub Actions** (`on: workflow_call`)
 | [`lint-shell.yml`](.github/workflows/lint-shell.yml) | ShellCheck sobre todos los `.sh` de una ruta | `path`, `severity`, `exclude-dirs` | — | `files-checked` | `contents: read` |
 | [`lint-python.yml`](.github/workflows/lint-python.yml) | `ruff check` y `ruff format --check` | `path`, `python-version`, `ruff-version`, `check-format` | — | — | `contents: read` |
 | [`test-python.yml`](.github/workflows/test-python.yml) | pytest + cobertura en matriz de versiones de Python | `python-versions`, `working-directory`, `install-command`, `coverage-target`, `coverage-threshold`, `test-path` | `codecov-token` (opcional) | — (sube `coverage.xml` como artefacto) | `contents: read` |
-| [`docker-build-scan-push.yml`](.github/workflows/docker-build-scan-push.yml) | Build con buildx, escaneo Trivy (falla en HIGH/CRITICAL) y push a GHCR solo en la rama por defecto | `image-name`, `registry`, `context`, `dockerfile`, `platforms`, `build-args`, `severity`, `ignore-unfixed`, `push` | `registry-token` (opcional) | `image`, `pushed`, `digest` | `contents: read`, `packages: write` |
+| [`docker-build-scan-push.yml`](.github/workflows/docker-build-scan-push.yml) | Build con buildx, escaneo Trivy (falla en HIGH/CRITICAL) y push a GHCR solo en la rama por defecto | `image-name`, `registry`, `context`, `dockerfile`, `platforms`, `build-args`, `severity`, `trivy-version`, `ignore-unfixed`, `push` | `registry-token` (opcional) | `image`, `pushed`, `digest` | `contents: read`, `packages: write` |
 | [`terraform-check.yml`](.github/workflows/terraform-check.yml) | `terraform fmt -check`, `init -backend=false`, `validate` y `tflint` | `working-directory`, `terraform-version`, `tflint-version`, `tflint-config` | — | — | `contents: read` |
 | [`lint-markdown.yml`](.github/workflows/lint-markdown.yml) | markdownlint-cli2 | `globs`, `config` | — | — | `contents: read` |
 
@@ -74,6 +74,7 @@ El informe `coverage.xml` se guarda siempre como artefacto (`coverage-py<versió
 | `platforms` | string | `linux/amd64` | Plataformas del push final (con varias se activa QEMU) |
 | `build-args` | string | `""` | Build args, uno por línea. **No pongas secretos aquí** |
 | `severity` | string | `HIGH,CRITICAL` | Severidades de Trivy que fallan el job |
+| `trivy-version` | string | `0.57.1` | Etiqueta de la imagen `aquasec/trivy` con la que se escanea |
 | `ignore-unfixed` | boolean | `true` | Ignora vulnerabilidades sin parche disponible |
 | `push` | boolean | `true` | Permite publicar; además exige rama por defecto y evento distinto de `pull_request` |
 
@@ -162,8 +163,8 @@ Para que un repositorio **privado** consuma estos workflows, este repo debe perm
 - **Checkout sin credenciales persistentes** (`persist-credentials: false`): el token no queda en `.git/config` para los pasos siguientes.
 - **Publicación acotada.** La imagen solo se publica si el escaneo de Trivy pasa, la rama es la rama por defecto y el evento no es `pull_request`. Los PR (incluidos los de forks) construyen y escanean, pero nunca publican.
 - **Secretos.** Solo hay dos secretos opcionales (`registry-token`, `codecov-token`). Sin `registry-token` se usa el `GITHUB_TOKEN` efímero de la ejecución. Evita `secrets: inherit` salvo en repos de confianza; pasa los secretos de forma explícita.
-- **Versiones fijadas.** Las acciones de terceros se fijan por etiqueta mayor (`@v4`, `@v3`...) y las herramientas (ruff, Terraform, TFLint) por versión exacta en los inputs por defecto.
-- **Endurecimiento pendiente: fijar por SHA.** Una etiqueta puede reescribirse; fijar cada `uses:` al SHA completo del commit (con un comentario con la versión) es la práctica más segura. Se recomienda hacerlo y mantenerlo con Dependabot (`package-ecosystem: github-actions`). Ver [`docs/decisiones.md`](docs/decisiones.md).
+- **Versiones fijadas.** Las acciones de terceros se fijan por etiqueta mayor (`@v4`, `@v3`...) y las herramientas (ruff, Terraform, TFLint, Trivy) por versión exacta en los inputs por defecto. Trivy se ejecuta desde su imagen oficial de Docker en lugar de una acción de terceros.
+- **Endurecimiento pendiente: fijar por SHA.** Una etiqueta puede reescribirse; fijar cada `uses:` al SHA completo del commit (con un comentario con la versión) es la práctica más segura. Se recomienda hacerlo; [`.github/dependabot.yml`](.github/dependabot.yml) ya propone cada semana las actualizaciones de acciones y de la imagen base de la fixture. Ver [`docs/decisiones.md`](docs/decisiones.md).
 - **Consumir con cuidado `@main`.** Es cómodo, pero un cambio en este repo afecta de inmediato a todos los consumidores. Para producción, usa una etiqueta (`@v1`) o un SHA.
 
 ## Concurrencia y caché
@@ -182,17 +183,19 @@ Entorno: Docker en local, sin acceso a runners de GitHub.
 | Sintaxis de los llamadores | `actionlint` sobre `examples/callers/*.yml` | 0 errores |
 | ShellCheck sobre la fixture | `koalaman/shellcheck:stable --severity=warning` | OK |
 | ruff + pytest (Python 3.12) | `ruff check`, `ruff format --check`, `pytest --cov-fail-under=90` | OK, 3 tests, 100 % de cobertura |
+| pytest en Python 3.11 y 3.13 | mismo comando en `python:3.11-slim` y `python:3.13-slim` | OK, 3 tests, 100 % de cobertura |
+| Existencia de las etiquetas de las acciones | `git ls-remote --tags` sobre cada repositorio de acción | Las 13 etiquetas usadas existen |
 | Terraform | `terraform fmt -check`, `init -backend=false`, `validate` (1.9.8) | OK |
 | TFLint | `ghcr.io/terraform-linters/tflint:v0.53.0` | Sin hallazgos |
-| Docker + Trivy | `docker build` y `trivy image --severity HIGH,CRITICAL --ignore-unfixed` | 0 vulnerabilidades |
+| Docker + Trivy | `docker build` y `trivy image --severity HIGH,CRITICAL --ignore-unfixed` | 0 vulnerabilidades; una imagen vulnerable (`alpine:3.10`) hace fallar el escaneo (exit 1) |
 | markdownlint | `davidanson/markdownlint-cli2` con `.markdownlint.yaml` | 0 incidencias en 2 ficheros (v0.24.2) |
 
 ### Lo que NO está validado
 
 - La **ejecución real en GitHub Actions** (runners, resolución de `uses:` entre repos, caché `gha`, permisos de `GITHUB_TOKEN`).
 - El **push real a GHCR** y la rama por defecto en un repo remoto.
-- Las acciones de terceros (`setup-terraform`, `setup-tflint`, `markdownlint-cli2-action`, `trivy-action`, `codecov-action`...) con las versiones indicadas: `actionlint` comprueba su sintaxis de uso, no que existan esas versiones.
-- La matriz de Python 3.11 y 3.13 (en local solo se probó 3.12).
+- El **comportamiento** de las acciones de terceros (`setup-terraform`, `setup-tflint`, `markdownlint-cli2-action`, `codecov-action`, `docker/*`...): se comprobó que sus etiquetas existen, no que funcionen como se espera en un runner.
+- El paso de Trivy dentro del runner (se probó el mismo `docker run` en local, no con el daemon de buildx de GitHub ni la caché de la base de datos).
 
 Reproducir `actionlint`:
 
