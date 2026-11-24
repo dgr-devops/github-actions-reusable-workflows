@@ -1,0 +1,115 @@
+name: Test Python (reusable)
+
+# Ejecuta pytest con cobertura sobre una matriz de versiones de Python.
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: Matriz de versiones de Python como array JSON.
+        type: string
+        default: '["3.11", "3.12"]'
+      working-directory:
+        description: Directorio del proyecto Python (relativo a la raíz del repo).
+        type: string
+        default: "."
+      install-command:
+        description: Comando para instalar el proyecto y sus dependencias.
+        type: string
+        default: 'python -m pip install -e .'
+      coverage-target:
+        description: Paquete o ruta sobre la que medir cobertura (--cov).
+        type: string
+        default: "."
+      coverage-threshold:
+        description: Cobertura mínima en porcentaje; por debajo el job falla.
+        type: number
+        default: 80
+      test-path:
+        description: Ruta de tests pasada a pytest (vacío = autodescubrimiento).
+        type: string
+        default: ""
+      runs-on:
+        description: Runner a usar.
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      codecov-token:
+        description: Token opcional de Codecov. Si no se pasa, no se sube cobertura.
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reusable-test-python-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CODECOV_TOKEN: ${{ secrets.codecov-token }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Instalar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/pyproject.toml
+            ${{ inputs.working-directory }}/requirements*.txt
+
+      - name: Instalar dependencias
+        env:
+          INSTALL_COMMAND: ${{ inputs.install-command }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pytest pytest-cov
+          bash -c "$INSTALL_COMMAND"
+
+      - name: pytest con cobertura
+        env:
+          COV_TARGET: ${{ inputs.coverage-target }}
+          COV_THRESHOLD: ${{ inputs.coverage-threshold }}
+          TEST_PATH: ${{ inputs.test-path }}
+        run: |
+          set -euo pipefail
+          # TEST_PATH vacío no debe llegar a pytest como argumento vacío.
+          pytest ${TEST_PATH:+"$TEST_PATH"} \
+            --cov="$COV_TARGET" \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under="$COV_THRESHOLD"
+
+      - name: Subir informe de cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: ${{ inputs.working-directory }}/coverage.xml
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Subir a Codecov (opcional)
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: ${{ inputs.working-directory }}/coverage.xml
+          fail_ci_if_error: false
