@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   shellcheck:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@v1
     with:
       path: scripts
       severity: warning

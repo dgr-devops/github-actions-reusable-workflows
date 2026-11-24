@@ -18,7 +18,7 @@ Cada acción de terceros se fija al SHA completo del commit y se deja la etiquet
 
 Los SHAs no se escribieron a mano: se resolvieron con `git ls-remote` (desreferenciando la etiqueta anotada con `^{}` cuando existe) contra el repositorio de cada acción, y `actionlint` valida el resultado. Dependabot (`github-actions`) propone las actualizaciones y actualiza también el comentario.
 
-Los llamadores de `examples/callers/` usan `@main` a propósito, por legibilidad; para producción se recomienda `@v1` o un SHA.
+Los llamadores de `examples/callers/` y el README usan la etiqueta móvil `@v1`: los consumidores reciben correcciones compatibles sin tocar nada, y un cambio incompatible pasaría a `v2`. Quien necesite reproducibilidad total puede fijar un SHA de este repo.
 
 Las herramientas (ruff, Terraform, TFLint) se fijan por versión exacta en inputs, con posibilidad de sobrescribirlas.
 
@@ -80,7 +80,7 @@ Limitación asumida: una ruta local prueba el workflow del mismo commit, pero no
 
 ## 13. Pendiente y mejoras posibles
 
-- Publicar una etiqueta `v1` y recomendar `@v1` a los consumidores.
 - Subir los resultados de Trivy en formato SARIF a *Code scanning* (requiere `security-events: write`).
 - Firmar imágenes con cosign y generar SBOM.
-- Ejecutar el autotest en GitHub y ajustar lo que falle (primer paso tras el push).
+- Subir las acciones `docker/*`, `markdownlint-cli2-action`, `setup-terraform` y `setup-tflint` a versiones con Node 24 (el CI avisa de que Node 20 está obsoleto); lo propondrá Dependabot.
+- Probar el consumo desde un repositorio distinto con `@v1` cuando los repos del portfolio lo adopten.

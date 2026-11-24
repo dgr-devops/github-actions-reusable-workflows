@@ -2,8 +2,8 @@
 
 Catálogo de **workflows reutilizables de GitHub Actions** (`on: workflow_call`) para lint, tests, imágenes Docker y Terraform. Pensados para consumirse desde otros repositorios con una sola línea `uses:`, en lugar de copiar y pegar pipelines.
 
-> **Estado de validación:** Validado localmente con actionlint; ejecución real en GitHub pendiente hasta el push.
-> Los workflows se han analizado con `actionlint` y los comandos que ejecutan se han probado en contenedores locales (ver [Validación](#validación)), pero **todavía no se han ejecutado en runners de GitHub**.
+> **Estado de validación:** validado localmente con `actionlint` y ejecutado en GitHub Actions: el autotest [`ci.yml`](.github/workflows/ci.yml) pasa en verde sobre runners reales, y el push a GHCR se comprobó una vez con la imagen de ejemplo.
+> Qué se ha probado y qué no (consumo desde otro repositorio, Codecov, PRs de forks) está en [Validación](#validación).
 
 ## Catálogo
 
@@ -123,12 +123,12 @@ permissions:
 
 jobs:
   shell:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@v1
     with:
       path: scripts
 
   tests:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@v1
     with:
       python-versions: '["3.11", "3.12", "3.13"]'
       coverage-target: mi_paquete
@@ -139,7 +139,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@v1
 ```
 
 En [`examples/callers/`](examples/callers/) hay un llamador completo por cada workflow, más [`full-pipeline.yml`](examples/callers/full-pipeline.yml) que los encadena.
@@ -175,7 +175,15 @@ Para que un repositorio **privado** consuma estos workflows, este repo debe perm
 
 ## Validación
 
-Entorno: Docker en local, sin acceso a runners de GitHub.
+### En GitHub Actions
+
+| Comprobación | Cómo | Resultado |
+| --- | --- | --- |
+| Autotest completo | `ci.yml` en push a `main` (9 jobs: actionlint, lint-shell, lint-python, matriz pytest 3.11/3.12/3.13, docker, terraform, lint-markdown) | Todo en verde en runners `ubuntu-latest` |
+| Push real a GHCR | `ci.yml` lanzado a mano con `publish-example=true` | Job en verde con `publicar: true`; la imagen `ghcr.io/dgr-devops/github-actions-reusable-workflows-example:latest` se resuelve con `docker manifest inspect` |
+| Acciones fijadas por SHA | Ejecución de las acciones fijadas | Funcionan; avisos de Node 20 obsoleto en `docker/*`, `markdownlint-cli2-action` y `setup-terraform`/`setup-tflint` (Dependabot propondrá las versiones nuevas) |
+
+### En local (Docker)
 
 | Comprobación | Comando | Resultado |
 | --- | --- | --- |
@@ -192,10 +200,10 @@ Entorno: Docker en local, sin acceso a runners de GitHub.
 
 ### Lo que NO está validado
 
-- La **ejecución real en GitHub Actions** (runners, resolución de `uses:` entre repos, caché `gha`, permisos de `GITHUB_TOKEN`).
-- El **push real a GHCR** y la rama por defecto en un repo remoto.
-- El **comportamiento** de las acciones de terceros (`setup-terraform`, `setup-tflint`, `markdownlint-cli2-action`, `codecov-action`, `docker/*`...): se comprobó que sus etiquetas existen, no que funcionen como se espera en un runner.
-- El paso de Trivy dentro del runner (se probó el mismo `docker run` en local, no con el daemon de buildx de GitHub ni la caché de la base de datos).
+- El **consumo desde otro repositorio**: el autotest llama a los workflows con rutas locales (`./.github/workflows/...`). La resolución `dgr-devops/github-actions-reusable-workflows/...@v1` desde un repo distinto se probará cuando los repos consumidores del portfolio lo adopten.
+- La **subida a Codecov** (requiere un token real, no se ha usado).
+- El comportamiento en **PRs desde forks** (permisos reducidos del `GITHUB_TOKEN`): el diseño no publica en PRs, pero no se ha ejecutado.
+- Que la **caché** (`gha`, pip, ruff, Terraform, Trivy) acierte en ejecuciones sucesivas: los jobs funcionan, no se han medido los aciertos de caché.
 
 Reproducir `actionlint`:
 

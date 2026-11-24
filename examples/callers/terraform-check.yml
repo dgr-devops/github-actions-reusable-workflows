@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   terraform:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/terraform-check.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/terraform-check.yml@v1
     with:
       working-directory: infra
       terraform-version: "1.9.8"

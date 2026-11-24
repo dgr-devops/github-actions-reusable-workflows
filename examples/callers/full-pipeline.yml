@@ -12,14 +12,14 @@ permissions:
 
 jobs:
   shell:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-shell.yml@v1
 
   python-lint:
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-python.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/lint-python.yml@v1
 
   python-test:
     needs: python-lint
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/test-python.yml@v1
     with:
       coverage-target: src
 
@@ -28,4 +28,4 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@v1

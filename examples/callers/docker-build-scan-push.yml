@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@main
+    uses: dgr-devops/github-actions-reusable-workflows/.github/workflows/docker-build-scan-push.yml@v1
     with:
       context: .
       dockerfile: Dockerfile
