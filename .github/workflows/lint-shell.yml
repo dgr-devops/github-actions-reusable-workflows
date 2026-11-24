@@ -1,0 +1,78 @@
+name: Lint Shell (reusable)
+
+# Ejecuta ShellCheck sobre todos los scripts .sh de una ruta.
+# ShellCheck viene preinstalado en los runners ubuntu-*.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directorio donde buscar scripts .sh (relativo a la raíz del repo).
+        type: string
+        default: "."
+      severity:
+        description: Severidad mínima que hace fallar (error, warning, info, style).
+        type: string
+        default: "warning"
+      exclude-dirs:
+        description: Directorios a ignorar, separados por espacios.
+        type: string
+        default: ".git node_modules .terraform"
+      runs-on:
+        description: Runner a usar.
+        type: string
+        default: "ubuntu-latest"
+    outputs:
+      files-checked:
+        description: Número de scripts analizados.
+        value: ${{ jobs.shellcheck.outputs.files-checked }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reusable-lint-shell-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      files-checked: ${{ steps.run.outputs.files-checked }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Ejecutar ShellCheck
+        id: run
+        env:
+          SCAN_PATH: ${{ inputs.path }}
+          SEVERITY: ${{ inputs.severity }}
+          EXCLUDE_DIRS: ${{ inputs.exclude-dirs }}
+        run: |
+          set -euo pipefail
+          shellcheck --version | sed -n '2p'
+
+          prune_args=()
+          for dir in $EXCLUDE_DIRS; do
+            prune_args+=(-name "$dir" -o)
+          done
+
+          mapfile -d '' files < <(
+            find "$SCAN_PATH" \( "${prune_args[@]}" -false \) -prune -o -type f -name '*.sh' -print0
+          )
+
+          echo "files-checked=${#files[@]}" >> "$GITHUB_OUTPUT"
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::warning::No se encontraron scripts .sh en '$SCAN_PATH'."
+            exit 0
+          fi
+
+          printf 'Analizando %s scripts\n' "${#files[@]}"
+          shellcheck --severity="$SEVERITY" --format=gcc "${files[@]}"
