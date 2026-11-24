@@ -36,6 +36,10 @@ on:
         description: Severidades de Trivy que hacen fallar el job.
         type: string
         default: "HIGH,CRITICAL"
+      trivy-version:
+        description: Versión de la imagen aquasec/trivy usada para escanear.
+        type: string
+        default: "0.57.1"
       ignore-unfixed:
         description: Ignorar vulnerabilidades sin parche disponible.
         type: boolean
@@ -142,15 +146,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Escanear con Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Cachear base de datos de Trivy
+        uses: actions/cache@v4
         with:
-          image-ref: ${{ steps.vars.outputs.local-tag }}
-          format: table
-          severity: ${{ inputs.severity }}
-          ignore-unfixed: ${{ inputs.ignore-unfixed }}
-          vuln-type: os,library
-          exit-code: "1"
+          path: ${{ runner.temp }}/trivy-cache
+          key: trivy-db-${{ inputs.trivy-version }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ inputs.trivy-version }}-
+
+      # Trivy se ejecuta desde su imagen oficial fijada: sin acción de terceros.
+      - name: Escanear con Trivy
+        env:
+          IMAGE_REF: ${{ steps.vars.outputs.local-tag }}
+          SEVERITY: ${{ inputs.severity }}
+          IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
+          TRIVY_VERSION: ${{ inputs.trivy-version }}
+          CACHE_DIR: ${{ runner.temp }}/trivy-cache
+        run: |
+          set -euo pipefail
+          mkdir -p "$CACHE_DIR"
+          args=(image --severity "$SEVERITY" --exit-code 1 --no-progress)
+          if [ "$IGNORE_UNFIXED" = "true" ]; then
+            args+=(--ignore-unfixed)
+          fi
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$CACHE_DIR":/root/.cache \
+            "aquasec/trivy:${TRIVY_VERSION}" "${args[@]}" "$IMAGE_REF"
 
       - name: Iniciar sesión en el registro
         if: ${{ steps.vars.outputs.push == 'true' }}
