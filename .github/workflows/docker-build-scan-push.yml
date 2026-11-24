@@ -1,0 +1,188 @@
+name: Docker build, scan & push (reusable)
+
+# Construye la imagen con buildx, la escanea con Trivy (falla en HIGH/CRITICAL)
+# y la publica en GHCR solo si el escaneo pasa y la rama es la rama por defecto.
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: >-
+          Nombre de la imagen sin registro ni etiqueta. Vacío = nombre del
+          repositorio en minúsculas (owner/repo).
+        type: string
+        default: ""
+      registry:
+        description: Registro de contenedores.
+        type: string
+        default: "ghcr.io"
+      context:
+        description: Contexto de build (relativo a la raíz del repo).
+        type: string
+        default: "."
+      dockerfile:
+        description: Ruta al Dockerfile (relativa a la raíz del repo).
+        type: string
+        default: "Dockerfile"
+      platforms:
+        description: Plataformas de destino separadas por comas.
+        type: string
+        default: "linux/amd64"
+      build-args:
+        description: Build args, uno por línea (CLAVE=valor). No pongas secretos aquí.
+        type: string
+        default: ""
+      severity:
+        description: Severidades de Trivy que hacen fallar el job.
+        type: string
+        default: "HIGH,CRITICAL"
+      ignore-unfixed:
+        description: Ignorar vulnerabilidades sin parche disponible.
+        type: boolean
+        default: true
+      push:
+        description: >-
+          Permitir publicar. Solo se publica si además la ejecución es en la
+          rama por defecto y no es un pull request.
+        type: boolean
+        default: true
+      runs-on:
+        description: Runner a usar.
+        type: string
+        default: "ubuntu-latest"
+    secrets:
+      registry-token:
+        description: >-
+          Token para el registro. Opcional: si no se pasa se usa el
+          GITHUB_TOKEN de la ejecución (requiere packages:write en el llamador).
+        required: false
+    outputs:
+      image:
+        description: Referencia de la imagen sin etiqueta (registro/nombre).
+        value: ${{ jobs.build-scan-push.outputs.image }}
+      pushed:
+        description: "'true' si la imagen se publicó en el registro."
+        value: ${{ jobs.build-scan-push.outputs.pushed }}
+      digest:
+        description: Digest de la imagen publicada (vacío si no se publicó).
+        value: ${{ jobs.build-scan-push.outputs.digest }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reusable-docker-${{ github.workflow }}-${{ github.ref }}
+  # Nunca cancelar a mitad una publicación en la rama por defecto.
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+jobs:
+  build-scan-push:
+    name: build, scan & push
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.vars.outputs.image }}
+      pushed: ${{ steps.vars.outputs.push }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Calcular variables
+        id: vars
+        env:
+          REGISTRY: ${{ inputs.registry }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          REPOSITORY: ${{ github.repository }}
+          PUSH_ALLOWED: ${{ inputs.push }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          name="${IMAGE_NAME:-$REPOSITORY}"
+          image="$(printf '%s/%s' "$REGISTRY" "$name" | tr '[:upper:]' '[:lower:]')"
+
+          push=false
+          if [ "$PUSH_ALLOWED" = "true" ] \
+            && [ "$EVENT_NAME" != "pull_request" ] \
+            && [ "$REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+            push=true
+          fi
+
+          {
+            echo "image=$image"
+            echo "push=$push"
+            echo "local-tag=$image:scan"
+          } >> "$GITHUB_OUTPUT"
+          echo "Imagen: $image | publicar: $push"
+
+      - name: Configurar QEMU
+        if: ${{ contains(inputs.platforms, ',') }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Primer build: imagen local de una sola plataforma para escanearla.
+      - name: Build (local, para escaneo)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
+          load: true
+          push: false
+          tags: ${{ steps.vars.outputs.local-tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Escanear con Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.vars.outputs.local-tag }}
+          format: table
+          severity: ${{ inputs.severity }}
+          ignore-unfixed: ${{ inputs.ignore-unfixed }}
+          vuln-type: os,library
+          exit-code: "1"
+
+      - name: Iniciar sesión en el registro
+        if: ${{ steps.vars.outputs.push == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.registry-token || secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos y etiquetas
+        id: meta
+        if: ${{ steps.vars.outputs.push == 'true' }}
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+            type=ref,event=tag
+
+      # El escaneo ya pasó: se reutiliza la caché de capas para publicar.
+      - name: Build y push
+        id: push
+        if: ${{ steps.vars.outputs.push == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

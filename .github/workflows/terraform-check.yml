@@ -1,0 +1,97 @@
+name: Terraform check (reusable)
+
+# terraform fmt -check, terraform validate (sin backend) y tflint.
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directorio con la configuración de Terraform.
+        type: string
+        default: "."
+      terraform-version:
+        description: Versión de Terraform.
+        type: string
+        default: "1.9.8"
+      tflint-version:
+        description: Versión de TFLint (con prefijo v).
+        type: string
+        default: "v0.53.0"
+      tflint-config:
+        description: Ruta a un .tflint.hcl (vacío = configuración por defecto).
+        type: string
+        default: ""
+      runs-on:
+        description: Runner a usar.
+        type: string
+        default: "ubuntu-latest"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reusable-terraform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: fmt, validate & tflint
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform-version }}
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: Cachear proveedores de Terraform
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.tf-plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ hashFiles(format('{0}/**/.terraform.lock.hcl', inputs.working-directory)) }}
+          restore-keys: |
+            terraform-plugins-${{ runner.os }}-
+
+      - name: terraform init (sin backend)
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+        run: |
+          set -euo pipefail
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform validate -no-color
+
+      - name: Instalar TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: ${{ inputs.tflint-version }}
+
+      - name: tflint
+        env:
+          TFLINT_CONFIG: ${{ inputs.tflint-config }}
+          # Evita el límite de la API de GitHub al descargar plugins.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$TFLINT_CONFIG" ]; then
+            args+=(--config "$GITHUB_WORKSPACE/$TFLINT_CONFIG")
+          fi
+          tflint --init "${args[@]}"
+          tflint --format compact "${args[@]}"
