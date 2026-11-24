@@ -12,11 +12,13 @@ Contrapartida: un reutilizable no puede ampliar los permisos del llamador, y los
 
 Todos declaran `permissions: contents: read` a nivel de workflow y repiten el permiso en el job. Solo `docker-build-scan-push` añade `packages: write` en su job. El llamador debe concederlo; si no, GitHub rechaza el job en lugar de degradarlo en silencio, lo que es preferible a publicar con permisos de más.
 
-## 3. Versiones: etiqueta mayor ahora, SHA como endurecimiento
+## 3. Versiones: SHA completo con la etiqueta como comentario
 
-Las acciones se fijan a su etiqueta mayor (`actions/checkout@v4`, `docker/build-push-action@v6`...); se comprobó con `git ls-remote --tags` que todas existen. Es legible y recibe parches de seguridad menores, pero una etiqueta es mutable: si se compromete el repo de la acción, el cambio llega sin revisión.
+Cada acción de terceros se fija al SHA completo del commit y se deja la etiqueta mayor como comentario (`actions/checkout@<sha> # v4`). Una etiqueta es mutable: si se compromete el repo de la acción, el cambio llega sin revisión; un SHA no.
 
-Endurecimiento recomendado y **no aplicado todavía**: fijar cada `uses:` al SHA completo y mantenerlo con Dependabot (`github-actions`). No se hizo porque no se pueden verificar SHAs sin acceso a GitHub, y un SHA inventado rompería el pipeline.
+Los SHAs no se escribieron a mano: se resolvieron con `git ls-remote` (desreferenciando la etiqueta anotada con `^{}` cuando existe) contra el repositorio de cada acción, y `actionlint` valida el resultado. Dependabot (`github-actions`) propone las actualizaciones y actualiza también el comentario.
+
+Los llamadores de `examples/callers/` usan `@main` a propósito, por legibilidad; para producción se recomienda `@v1` o un SHA.
 
 Las herramientas (ruff, Terraform, TFLint) se fijan por versión exacta en inputs, con posibilidad de sobrescribirlas.
 
@@ -78,7 +80,6 @@ Limitación asumida: una ruta local prueba el workflow del mismo commit, pero no
 
 ## 13. Pendiente y mejoras posibles
 
-- Fijar las acciones por SHA (Dependabot, ya configurado en `.github/dependabot.yml`, propone las actualizaciones).
 - Publicar una etiqueta `v1` y recomendar `@v1` a los consumidores.
 - Subir los resultados de Trivy en formato SARIF a *Code scanning* (requiere `security-events: write`).
 - Firmar imágenes con cosign y generar SBOM.

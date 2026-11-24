@@ -45,12 +45,12 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Instalar Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ inputs.terraform-version }}
           terraform_wrapper: false
@@ -59,7 +59,7 @@ jobs:
         run: terraform fmt -check -recursive -diff
 
       - name: Cachear proveedores de Terraform
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ github.workspace }}/.tf-plugin-cache
           key: terraform-plugins-${{ runner.os }}-${{ hashFiles(format('{0}/**/.terraform.lock.hcl', inputs.working-directory)) }}
@@ -78,7 +78,7 @@ jobs:
         run: terraform validate -no-color
 
       - name: Instalar TFLint
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
         with:
           tflint_version: ${{ inputs.tflint-version }}
 

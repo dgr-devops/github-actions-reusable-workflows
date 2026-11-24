@@ -163,8 +163,8 @@ Para que un repositorio **privado** consuma estos workflows, este repo debe perm
 - **Checkout sin credenciales persistentes** (`persist-credentials: false`): el token no queda en `.git/config` para los pasos siguientes.
 - **Publicación acotada.** La imagen solo se publica si el escaneo de Trivy pasa, la rama es la rama por defecto y el evento no es `pull_request`. Los PR (incluidos los de forks) construyen y escanean, pero nunca publican.
 - **Secretos.** Solo hay dos secretos opcionales (`registry-token`, `codecov-token`). Sin `registry-token` se usa el `GITHUB_TOKEN` efímero de la ejecución. Evita `secrets: inherit` salvo en repos de confianza; pasa los secretos de forma explícita.
-- **Versiones fijadas.** Las acciones de terceros se fijan por etiqueta mayor (`@v4`, `@v3`...) y las herramientas (ruff, Terraform, TFLint, Trivy) por versión exacta en los inputs por defecto. Trivy se ejecuta desde su imagen oficial de Docker en lugar de una acción de terceros.
-- **Endurecimiento pendiente: fijar por SHA.** Una etiqueta puede reescribirse; fijar cada `uses:` al SHA completo del commit (con un comentario con la versión) es la práctica más segura. Se recomienda hacerlo; [`.github/dependabot.yml`](.github/dependabot.yml) ya propone cada semana las actualizaciones de acciones y de la imagen base de la fixture. Ver [`docs/decisiones.md`](docs/decisiones.md).
+- **Acciones fijadas por SHA.** Cada acción de terceros apunta al SHA completo de su commit, con la etiqueta como comentario (`@<sha> # v4`), porque una etiqueta puede reescribirse. [`.github/dependabot.yml`](.github/dependabot.yml) propone cada semana las actualizaciones. Ver [`docs/decisiones.md`](docs/decisiones.md).
+- **Herramientas fijadas.** ruff, Terraform, TFLint y Trivy se fijan por versión exacta en los inputs por defecto. Trivy se ejecuta desde su imagen oficial de Docker en lugar de una acción de terceros.
 - **Consumir con cuidado `@main`.** Es cómodo, pero un cambio en este repo afecta de inmediato a todos los consumidores. Para producción, usa una etiqueta (`@v1`) o un SHA.
 
 ## Concurrencia y caché
@@ -184,7 +184,7 @@ Entorno: Docker en local, sin acceso a runners de GitHub.
 | ShellCheck sobre la fixture | `koalaman/shellcheck:stable --severity=warning` | OK |
 | ruff + pytest (Python 3.12) | `ruff check`, `ruff format --check`, `pytest --cov-fail-under=90` | OK, 3 tests, 100 % de cobertura |
 | pytest en Python 3.11 y 3.13 | mismo comando en `python:3.11-slim` y `python:3.13-slim` | OK, 3 tests, 100 % de cobertura |
-| Existencia de las etiquetas de las acciones | `git ls-remote --tags` sobre cada repositorio de acción | Las 13 etiquetas usadas existen |
+| Etiquetas de las acciones y SHAs fijados | `git ls-remote --tags` sobre cada repositorio de acción | Las 13 etiquetas existen; SHAs resueltos desde GitHub, no escritos a mano |
 | Terraform | `terraform fmt -check`, `init -backend=false`, `validate` (1.9.8) | OK |
 | TFLint | `ghcr.io/terraform-linters/tflint:v0.53.0` | Sin hallazgos |
 | Docker + Trivy | `docker build` y `trivy image --severity HIGH,CRITICAL --ignore-unfixed` | 0 vulnerabilidades; una imagen vulnerable (`alpine:3.10`) hace fallar el escaneo (exit 1) |
